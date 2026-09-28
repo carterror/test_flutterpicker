@@ -48,9 +48,9 @@ python -m http.server 8080 --directory build/web
 
 ## Repro steps
 
-> Section **0. Upload field (simulated preview)** is a static mock: it never
-> opens a dialog and never calls `file_picker`. It only exists so the field can
-> be seen empty and filled. Ignore it when evaluating the bug.
+> Section **0. Upload field** is the same `FilePicker.pickFile()` call wrapped
+> in an ordinary upload field, so the failure can be seen where a user would hit
+> it. It is a real picker call, not a mock.
 
 1. Open the app in Safari on macOS (or any browser on iOS).
 2. Under **1. Repro with the real plugin**, click *pickFile — as in the issue*.

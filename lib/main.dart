@@ -91,8 +91,15 @@ class _ReproPageState extends State<ReproPage> {
     }
   }
 
-  void _log(String message, {Duration at = Duration.zero}) {
-    _entries.insert(0, _LogEntry(message, at: at));
+  /// Appends a line to the shared log and rebuilds the page.
+  ///
+  /// It does its own `setState` so callers outside this widget — such as the
+  /// upload field — can log without wrapping the call themselves.
+  void _log(String message, {Duration? at}) {
+    if (!mounted) return;
+    setState(() {
+      _entries.insert(0, _LogEntry(message, at: at ?? Duration.zero));
+    });
   }
 
   /// Runs a picker call and reports how long it took — or keeps the UI at
@@ -105,8 +112,8 @@ class _ReproPageState extends State<ReproPage> {
     setState(() {
       _pickerLabel = label;
       _pickerWatch = watch;
-      _log('▸ $label');
     });
+    _log('▸ $label');
     _ensureTicking();
 
     String summary;
@@ -121,8 +128,8 @@ class _ReproPageState extends State<ReproPage> {
     setState(() {
       _pickerLabel = null;
       _pickerWatch = null;
-      _log('$summary   [${watch.elapsedMilliseconds} ms]', at: watch.elapsed);
     });
+    _log('$summary   [${watch.elapsedMilliseconds} ms]', at: watch.elapsed);
     _stopTickingIfIdle();
   }
 
@@ -220,127 +227,134 @@ class _ReproPageState extends State<ReproPage> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
-          child: ListView(
+          // Deliberately not a ListView: a lazy list disposes off-screen cards,
+          // which would silently drop the file picked in the upload field.
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
-            children: <Widget>[
-              const _SimulatedUploadCard(),
-              const SizedBox(height: 16),
-              _Card(
-                title: '1. Repro with the real plugin',
-                subtitle:
-                    'Click a button, choose a file in the dialog and confirm. '
-                    'If the log stays at "still pending…", the future never '
-                    'resolved.',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        FilledButton(
-                          onPressed: _busy ? null : _pickAsReported,
-                          child: const Text('pickFile — as in the issue'),
-                        ),
-                        FilledButton(
-                          onPressed: _busy ? null : _pickWithCustomType,
-                          child: const Text('pickFile — FileType.custom'),
-                        ),
-                        FilledButton(
-                          onPressed: _busy ? null : _pickMultiple,
-                          child: const Text('pickFiles — multiple'),
-                        ),
-                      ],
-                    ),
-                    if (_pickerLabel != null) ...<Widget>[
-                      const SizedBox(height: 12),
-                      _PendingBanner(
-                        label: _pickerLabel!,
-                        elapsed: _pickerWatch?.elapsed ?? Duration.zero,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _Card(
-                title: '2. Isolated DOM probe (no file_picker involved)',
-                subtitle:
-                    'Proves the mechanism: a bare <input type="file"> that is '
-                    'detached right after click() — exactly what '
-                    'file_picker_web 4.0.0 does — against the same input kept '
-                    'in the DOM. Run both and compare.',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        OutlinedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _runProbe(detach: false),
-                          child: const Text('Run probe — input kept in DOM'),
-                        ),
-                        OutlinedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _runProbe(detach: true),
-                          child: const Text('Run probe — input detached'),
-                        ),
-                      ],
-                    ),
-                    if (_probeLabel != null) ...<Widget>[
-                      const SizedBox(height: 12),
-                      _PendingBanner(
-                        label: _probeLabel!,
-                        elapsed: _probeWatch?.elapsed ?? Duration.zero,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    _ProbeRow(
-                      title: 'input kept in the DOM',
-                      report: _attachedReport,
-                      expectedToWork: true,
-                    ),
-                    _ProbeRow(
-                      title: 'input detached after click()',
-                      report: _detachedReport,
-                      expectedToWork: false,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _Card(
-                title: '3. Log',
-                subtitle: 'Newest first. Times are measured in Dart.',
-                child: _entries.isEmpty
-                    ? Text(
-                        'Nothing yet — run one of the buttons above.',
-                        style: theme.textTheme.bodySmall,
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _UploadFieldCard(onLog: _log),
+                const SizedBox(height: 16),
+                _Card(
+                  title: '1. Repro with the real plugin',
+                  subtitle:
+                      'Click a button, choose a file in the dialog and confirm. '
+                      'If the log stays at "still pending…", the future never '
+                      'resolved.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: <Widget>[
-                          for (final _LogEntry entry in _entries)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: Text(
-                                '${entry.at.inMilliseconds.toString().padLeft(6)} ms  ${entry.message}',
-                                style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
+                          FilledButton(
+                            onPressed: _busy ? null : _pickAsReported,
+                            child: const Text('pickFile — as in the issue'),
+                          ),
+                          FilledButton(
+                            onPressed: _busy ? null : _pickWithCustomType,
+                            child: const Text('pickFile — FileType.custom'),
+                          ),
+                          FilledButton(
+                            onPressed: _busy ? null : _pickMultiple,
+                            child: const Text('pickFiles — multiple'),
+                          ),
                         ],
                       ),
-              ),
-              const SizedBox(height: 16),
-              const _EnvironmentCard(),
-            ],
+                      if (_pickerLabel != null) ...<Widget>[
+                        const SizedBox(height: 12),
+                        _PendingBanner(
+                          label: _pickerLabel!,
+                          elapsed: _pickerWatch?.elapsed ?? Duration.zero,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _Card(
+                  title: '2. Isolated DOM probe (no file_picker involved)',
+                  subtitle:
+                      'Proves the mechanism: a bare <input type="file"> that is '
+                      'detached right after click() — exactly what '
+                      'file_picker_web 4.0.0 does — against the same input kept '
+                      'in the DOM. Run both and compare.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: <Widget>[
+                          OutlinedButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _runProbe(detach: false),
+                            child: const Text('Run probe — input kept in DOM'),
+                          ),
+                          OutlinedButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _runProbe(detach: true),
+                            child: const Text('Run probe — input detached'),
+                          ),
+                        ],
+                      ),
+                      if (_probeLabel != null) ...<Widget>[
+                        const SizedBox(height: 12),
+                        _PendingBanner(
+                          label: _probeLabel!,
+                          elapsed: _probeWatch?.elapsed ?? Duration.zero,
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      _ProbeRow(
+                        title: 'input kept in the DOM',
+                        report: _attachedReport,
+                        expectedToWork: true,
+                      ),
+                      _ProbeRow(
+                        title: 'input detached after click()',
+                        report: _detachedReport,
+                        expectedToWork: false,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _Card(
+                  title: '3. Log',
+                  subtitle: 'Newest first. Times are measured in Dart.',
+                  child: _entries.isEmpty
+                      ? Text(
+                          'Nothing yet — run one of the buttons above.',
+                          style: theme.textTheme.bodySmall,
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            for (final _LogEntry entry in _entries)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  '${entry.at.inMilliseconds.toString().padLeft(6)} ms  ${entry.message}',
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 16),
+                const _EnvironmentCard(),
+              ],
+            ),
           ),
         ),
       ),
@@ -528,84 +542,147 @@ class _EnvironmentCard extends StatelessWidget {
   }
 }
 
-/// A purely visual preview of the upload field.
+/// The upload field, wired to the real picker.
 ///
-/// This card never opens the OS dialog and never touches `file_picker`: it just
-/// fabricates a selection so the empty and filled states can be seen (for a
-/// walkthrough or a screenshot). It is deliberately labelled as simulated so it
-/// cannot be mistaken for evidence about the bug.
-class _SimulatedUploadCard extends StatefulWidget {
-  const _SimulatedUploadCard();
+/// It performs the same `FilePicker.pickFile()` call as the buttons in section 1;
+/// the point of this card is to show the failure inside an ordinary upload
+/// field. When the future never resolves the field stays on
+/// "waiting for the picker…" and the chosen file never appears.
+class _UploadFieldCard extends StatefulWidget {
+  const _UploadFieldCard({required this.onLog});
+
+  /// Reports each attempt to the shared log.
+  final void Function(String message, {Duration? at}) onLog;
 
   @override
-  State<_SimulatedUploadCard> createState() => _SimulatedUploadCardState();
+  State<_UploadFieldCard> createState() => _UploadFieldCardState();
 }
 
-class _SimulatedUploadCardState extends State<_SimulatedUploadCard> {
-  /// Sample "files" as (name, size in bytes).
-  static const List<(String, int)> _samples = <(String, int)>[
-    ('informe-final.pdf', 248320),
-    ('captura-pantalla.png', 1048576),
-    ('anexo-contrato.docx', 73400),
-  ];
+class _UploadFieldCardState extends State<_UploadFieldCard> {
+  final List<PlatformFile> _files = <PlatformFile>[];
+  final Map<PlatformFile, int?> _sizes = <PlatformFile, int?>{};
 
-  final List<(String, int)> _files = <(String, int)>[];
+  /// Non-null while a pick is in flight.
+  Stopwatch? _watch;
+  Timer? _ticker;
 
-  void _simulatePick() {
-    setState(() => _files.add(_samples[_files.length % _samples.length]));
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _pick() async {
+    if (_watch != null) return;
+
+    final Stopwatch watch = Stopwatch()..start();
+    setState(() => _watch = watch);
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (mounted) setState(() {});
+    });
+    widget.onLog(
+      '▸ upload field → pickFile(type: FileType.custom, '
+      'allowedExtensions: [pdf, png, jpg])',
+    );
+
+    String outcome;
+    try {
+      final PlatformFile? file = await FilePicker.pickFile(
+        dialogTitle: 'Upload field',
+        type: FileType.custom,
+        allowedExtensions: <String>['pdf', 'png', 'jpg'],
+      );
+
+      if (file == null) {
+        outcome = '⚠ upload field → resolved with NULL — no file was received';
+      } else {
+        final int? size = file.lengthSync() ?? await file.length();
+        if (mounted) {
+          setState(() {
+            _files.add(file);
+            _sizes[file] = size;
+          });
+        }
+        outcome = '✓ upload field → resolved with "${file.name}"';
+      }
+    } catch (error) {
+      outcome = '✗ upload field → threw ${error.runtimeType}: $error';
+    }
+
+    watch.stop();
+    _ticker?.cancel();
+    _ticker = null;
+    if (mounted) {
+      setState(() => _watch = null);
+    }
+    widget.onLog(
+      '$outcome   [${watch.elapsedMilliseconds} ms]',
+      at: watch.elapsed,
+    );
+  }
+
+  void _clear() {
+    _files.clear();
+    _sizes.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
+    final Stopwatch? watch = _watch;
+    final bool picking = watch != null;
 
     return _Card(
-      title: '0. Upload field (simulated preview)',
+      title: '0. Upload field',
       subtitle:
-          'Visual only — this card never opens the dialog and does not call '
-          'file_picker. It is here so the field can be seen empty and filled.',
+          'The same FilePicker.pickFile() call as section 1, wrapped in an '
+          'ordinary upload field. If the picker never resolves, this field '
+          'stays on "waiting for the picker…" and the file never appears.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _SimulatedDropZone(
-            onTap: _simulatePick,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(
-                  Icons.cloud_upload_outlined,
-                  size: 40,
-                  color: colors.primary,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Selecciona uno o varios archivos',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Formatos: PDF, PNG, JPG',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+          _UploadDropZone(
+            enabled: !picking,
+            onTap: _pick,
+            child: picking
+                ? _WaitingForPicker(elapsed: watch.elapsed)
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(
+                        Icons.cloud_upload_outlined,
+                        size: 40,
+                        color: colors.primary,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Selecciona un archivo',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Formatos: PDF, PNG, JPG',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             children: <Widget>[
-              OutlinedButton.icon(
-                onPressed: _simulatePick,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Simulate a selection'),
+              FilledButton.icon(
+                onPressed: picking ? null : _pick,
+                icon: const Icon(Icons.upload_file, size: 18),
+                label: const Text('Upload a file'),
               ),
               TextButton.icon(
-                onPressed: _files.isEmpty ? null : () => setState(_files.clear),
+                onPressed: _files.isEmpty ? null : () => setState(_clear),
                 icon: const Icon(Icons.delete_outline, size: 18),
                 label: const Text('Clear'),
               ),
@@ -614,17 +691,17 @@ class _SimulatedUploadCardState extends State<_SimulatedUploadCard> {
           const SizedBox(height: 4),
           if (_files.isEmpty)
             Text(
-              'No files yet — press "Simulate a selection".',
+              'No file selected yet.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant,
               ),
             )
           else
-            for (final (String name, int size) in _files)
-              _SimulatedFileTile(
-                name: name,
-                size: size,
-                onRemove: () => setState(() => _files.remove((name, size))),
+            for (final PlatformFile file in _files)
+              _UploadFieldTile(
+                file: file,
+                size: _sizes[file],
+                onRemove: () => setState(() => _files.remove(file)),
               ),
         ],
       ),
@@ -632,22 +709,53 @@ class _SimulatedUploadCardState extends State<_SimulatedUploadCard> {
   }
 }
 
-/// One fabricated file row inside the simulated field.
-class _SimulatedFileTile extends StatelessWidget {
-  const _SimulatedFileTile({
-    required this.name,
+/// Shown inside the drop zone while the picker future is outstanding.
+class _WaitingForPicker extends StatelessWidget {
+  const _WaitingForPicker({required this.elapsed});
+
+  final Duration elapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 3, color: colors.error),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'waiting for the picker… '
+          '${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: colors.error, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+/// One real, picked file shown inside the upload field.
+class _UploadFieldTile extends StatelessWidget {
+  const _UploadFieldTile({
+    required this.file,
     required this.size,
     required this.onRemove,
   });
 
-  final String name;
-  final int size;
+  final PlatformFile file;
+  final int? size;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
+    final int? bytes = size;
 
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -667,7 +775,7 @@ class _SimulatedFileTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              _iconForName(name),
+              _iconForName(file.name),
               size: 22,
               color: colors.onPrimaryContainer,
             ),
@@ -678,7 +786,7 @@ class _SimulatedFileTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  name,
+                  file.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -686,7 +794,8 @@ class _SimulatedFileTile extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${_formatBytes(size)} · simulated',
+                  '${bytes == null ? 'size unavailable' : _formatBytes(bytes)}'
+                  ' · ${file.extension?.toUpperCase() ?? 'file'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -707,19 +816,24 @@ class _SimulatedFileTile extends StatelessWidget {
   }
 }
 
-/// A tappable rectangle with a dashed border, used by the simulated field.
-class _SimulatedDropZone extends StatelessWidget {
-  const _SimulatedDropZone({required this.child, required this.onTap});
+/// A tappable rectangle with a dashed border, used by the upload field.
+class _UploadDropZone extends StatelessWidget {
+  const _UploadDropZone({
+    required this.child,
+    required this.onTap,
+    this.enabled = true,
+  });
 
   final Widget child;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       child: CustomPaint(
         foregroundPainter: _DashedBorderPainter(
           color: colors.outline,
@@ -733,7 +847,7 @@ class _SimulatedDropZone extends StatelessWidget {
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
-              onTap: onTap,
+              onTap: enabled ? onTap : null,
               borderRadius: BorderRadius.circular(16),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
