@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:ui' show PathMetric;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -222,6 +223,8 @@ class _ReproPageState extends State<ReproPage> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: <Widget>[
+              const _SimulatedUploadCard(),
+              const SizedBox(height: 16),
               _Card(
                 title: '1. Repro with the real plugin',
                 subtitle:
@@ -523,6 +526,299 @@ class _EnvironmentCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A purely visual preview of the upload field.
+///
+/// This card never opens the OS dialog and never touches `file_picker`: it just
+/// fabricates a selection so the empty and filled states can be seen (for a
+/// walkthrough or a screenshot). It is deliberately labelled as simulated so it
+/// cannot be mistaken for evidence about the bug.
+class _SimulatedUploadCard extends StatefulWidget {
+  const _SimulatedUploadCard();
+
+  @override
+  State<_SimulatedUploadCard> createState() => _SimulatedUploadCardState();
+}
+
+class _SimulatedUploadCardState extends State<_SimulatedUploadCard> {
+  /// Sample "files" as (name, size in bytes).
+  static const List<(String, int)> _samples = <(String, int)>[
+    ('informe-final.pdf', 248320),
+    ('captura-pantalla.png', 1048576),
+    ('anexo-contrato.docx', 73400),
+  ];
+
+  final List<(String, int)> _files = <(String, int)>[];
+
+  void _simulatePick() {
+    setState(() => _files.add(_samples[_files.length % _samples.length]));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colors = theme.colorScheme;
+
+    return _Card(
+      title: '0. Upload field (simulated preview)',
+      subtitle:
+          'Visual only — this card never opens the dialog and does not call '
+          'file_picker. It is here so the field can be seen empty and filled.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _SimulatedDropZone(
+            onTap: _simulatePick,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  Icons.cloud_upload_outlined,
+                  size: 40,
+                  color: colors.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Selecciona uno o varios archivos',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Formatos: PDF, PNG, JPG',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: _simulatePick,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Simulate a selection'),
+              ),
+              TextButton.icon(
+                onPressed: _files.isEmpty ? null : () => setState(_files.clear),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Clear'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (_files.isEmpty)
+            Text(
+              'No files yet — press "Simulate a selection".',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            )
+          else
+            for (final (String name, int size) in _files)
+              _SimulatedFileTile(
+                name: name,
+                size: size,
+                onRemove: () => setState(() => _files.remove((name, size))),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One fabricated file row inside the simulated field.
+class _SimulatedFileTile extends StatelessWidget {
+  const _SimulatedFileTile({
+    required this.name,
+    required this.size,
+    required this.onRemove,
+  });
+
+  final String name;
+  final int size;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colors = theme.colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              _iconForName(name),
+              size: 22,
+              color: colors.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${_formatBytes(size)} · simulated',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onRemove,
+            tooltip: 'Remove',
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A tappable rectangle with a dashed border, used by the simulated field.
+class _SimulatedDropZone extends StatelessWidget {
+  const _SimulatedDropZone({required this.child, required this.onTap});
+
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: CustomPaint(
+        foregroundPainter: _DashedBorderPainter(
+          color: colors.outline,
+          radius: 16,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 32,
+                  horizontal: 20,
+                ),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a dashed rounded border around the widget it decorates.
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color, required this.radius});
+
+  static const double _dash = 6;
+  static const double _gap = 4;
+  static const double _strokeWidth = 1.5;
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth;
+
+    final Rect rect = Rect.fromLTWH(
+      _strokeWidth / 2,
+      _strokeWidth / 2,
+      size.width - _strokeWidth,
+      size.height - _strokeWidth,
+    );
+    final Path path = Path()
+      ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+
+    for (final PathMetric metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final double end = (distance + _dash).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + _gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.radius != radius;
+  }
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  const List<String> units = <String>['KB', 'MB', 'GB', 'TB'];
+  double value = bytes / 1024;
+  int unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return '${value.toStringAsFixed(value >= 10 ? 0 : 1)} ${units[unit]}';
+}
+
+IconData _iconForName(String name) {
+  final int dot = name.lastIndexOf('.');
+  final String? extension = dot == -1 ? null : name.substring(dot + 1);
+
+  return switch (extension?.toLowerCase()) {
+    'pdf' => Icons.picture_as_pdf_outlined,
+    'png' || 'jpg' || 'jpeg' || 'gif' || 'webp' => Icons.image_outlined,
+    'doc' || 'docx' => Icons.description_outlined,
+    'xls' || 'xlsx' || 'csv' => Icons.table_chart_outlined,
+    'zip' || 'rar' || '7z' => Icons.folder_zip_outlined,
+    'mp4' || 'mov' || 'avi' => Icons.movie_outlined,
+    'mp3' || 'wav' => Icons.audiotrack_outlined,
+    _ => Icons.insert_drive_file_outlined,
+  };
 }
 
 String _describeOutcome(DomProbeOutcome outcome) => switch (outcome) {
