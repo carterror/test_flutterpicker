@@ -1,5 +1,5 @@
 name: test_flutterpicker
-description: "A new Flutter project."
+description: "Minimal reproduction for file_picker issue #2222 (web picker never resolves on Apple platforms)."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -35,6 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   file_picker: ^13.1.0
+
+  # Used only by the isolated DOM probe (lib/dom_probe_web.dart) to drive a
+  # raw <input type="file"> element.
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
